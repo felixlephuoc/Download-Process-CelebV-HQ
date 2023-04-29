@@ -63,7 +63,7 @@ This **[issue](https://github.com/CelebV-HQ/CelebV-HQ/issues/8)** is helpful.
 
 Prepare the environment: 
 ```bash
-pip install youtube_dl
+pip install yt-dlp
 pip install opencv-python
 ```
 
