@@ -2,7 +2,7 @@ import cv2
 import os
 import glob
 import argparse
-
+from tqdm import tqdm
 
 # Define a function to process EACH video
 def extract_frame(video_path: str, output_dir: str, n_frames_extract:int=3, temporal_stride: float=1.0, target_resolution: tuple=(512,512)):
@@ -44,7 +44,7 @@ def extract_frame(video_path: str, output_dir: str, n_frames_extract:int=3, temp
     # Extract and resize the frames
     for i in range(n_frames_extract):
         frame_idx = int(i * temporal_stride * fps) # Get index of the frame to be extracted
-        print(f"Frame index: {frame_idx}")
+        # print(f"Frame index: {frame_idx}")
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx) # set the current frame position frame idx
         ret, frame = cap.read() # read the current frame
         if not ret:
@@ -56,7 +56,7 @@ def extract_frame(video_path: str, output_dir: str, n_frames_extract:int=3, temp
         
         # Save the frames
         frame_path = os.path.join(output_path, f"frames_{i}.jpg")
-        print(f"frame path: {frame_path}")
+        # print(f"frame path: {frame_path}")
         cv2.imwrite(frame_path, resized_frame)
 
 if __name__ == '__main__':
@@ -76,7 +76,7 @@ if __name__ == '__main__':
         os.makedirs(args.output_dir, exist_ok=True)
 
     # Loop through all video in the input direcotory to extract frames:
-    for video in glob.glob(args.input_dir + '/*.mp4'):
+    for video in tqdm(glob.glob(args.input_dir + '/*.mp4')):
         extract_frame(video, args.output_dir, args.n_frames_extract, args.interval, args.size)
         
         
