@@ -5,6 +5,9 @@ Downloader
 import os
 import json
 import cv2
+import argparse
+import multiprocessing as mp
+
 
 
 def download(video_path, ytb_id, proxy=None):
@@ -17,7 +20,7 @@ def download(video_path, ytb_id, proxy=None):
         proxy_cmd = "--proxy {}".format(proxy)
     else:
         proxy_cmd = ""
-    if not os.path.exists(video_path):
+    if not os.path.exists(video_path): # check if the video already downloaded
         down_video = " ".join([
             "yt-dlp",
             proxy_cmd,
@@ -28,7 +31,6 @@ def download(video_path, ytb_id, proxy=None):
             video_path, "--external-downloader", "aria2c",
             "--external-downloader-args", '"-x 16 -k 1M"'
         ])
-        print(down_video)
         status = os.system(down_video)
         if status != 0:
             print(f"video not found: {ytb_id}")
@@ -79,18 +81,27 @@ def process_ffmpeg(raw_vid_path, save_folder, save_vid_name,
 
         return top, bottom, left, right
 
-    out_path = os.path.join(save_folder, save_vid_name)
+    if not os.path.exists(raw_vid_path): # the raw video not exist
+        return 
+    
+    else: # the raw video exist => process it     
+        out_path = os.path.join(save_folder, save_vid_name)
+        
+        cap = cv2.VideoCapture(raw_vid_path)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        top, bottom, left, right = to_square(
+            denorm(expand(bbox, 0.02), height, width))
+        start_sec, end_sec = time
 
-    cap = cv2.VideoCapture(raw_vid_path)
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    top, bottom, left, right = to_square(
-        denorm(expand(bbox, 0.02), height, width))
-    start_sec, end_sec = time
+        # Check the FPS
+        #fps = cap.get(cv2.CAP_PROP_FPS)
+        #print("FPS of the video: ", fps)
 
-    cmd = f"ffmpeg -i {raw_vid_path} -vf crop=w={right-left}:h={bottom-top}:x={left}:y={top} -ss {secs_to_timestr(start_sec)} -to {secs_to_timestr(end_sec)} -loglevel error {out_path}"
-    os.system(cmd)
-    return out_path
+        cmd = f"ffmpeg -i {raw_vid_path} -vf crop=w={right-left}:h={bottom-top}:x={left}:y={top} \
+            -ss {secs_to_timestr(start_sec)} -to {secs_to_timestr(end_sec)} -loglevel error {out_path}"
+        os.system(cmd)
+        return out_path
 
 
 def load_data(file_path):
@@ -108,23 +119,53 @@ def load_data(file_path):
 
 
 if __name__ == '__main__':
-    json_path = 'celebvhq_info.json'  # json file path
-    raw_vid_root = './downloaded_celebvhq/raw/'  # download raw video path
-    processed_vid_root = './downloaded_celebvhq/processed/'  # processed video path
-    proxy = None  # proxy url example, set to None if not use
-
-    os.makedirs(raw_vid_root, exist_ok=True)
-    os.makedirs(processed_vid_root, exist_ok=True)
-
-    for vid_id, save_vid_name, time, bbox in load_data(json_path):
-        raw_vid_path = os.path.join(raw_vid_root, vid_id + ".mp4")
-        # Downloading is io bounded and processing is cpu bounded.
-        # It is better to download all videos firstly and then process them via mutiple cpu cores.
-        download(raw_vid_path, vid_id, proxy)
-        # process_ffmpeg(raw_vid_path, processed_vid_root, save_vid_name, bbox, time)
-
-    # with open('./ytb_id_errored.log', 'r') as f:
-    #     lines = f.readlines()
-    # for line in lines:
-    #     raw_vid_path = os.path.join(raw_vid_root, line + ".mp4")
-    #     download(raw_vid_path, line)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-json', '--json_path', type=str, default='celebvhq_info.json', help='Path to the metadata json file')
+    parser.add_argument('-raw_path', '--raw_video_root', type=str, default='./downloaded_celebvhq/raw/', help='Path to raw videos')
+    parser.add_argument('-process_path', '--processed_video_root', type=str, default='./downloaded_celebvhq/processed/', help='Path to store processed videos')
+    parser.add_argument('-proxy', default=None, help='proxy url example, set to None if not use')
+    parser.add_argument('-mode', '--running_mode', type=str, choices=['download', 'process'],\
+        help="Running either Downloading or Processing the videos", default='download')
+    
+    args = parser.parse_args()
+    
+    # Create the output directory
+    os.makedirs(args.raw_video_root, exist_ok=True)
+    os.makedirs(args.processed_video_root, exist_ok=True)
+    
+    # Create a list to store arguments for each video
+    process_video_args = []
+    
+    for vid_id, save_vid_name, time, bbox in load_data(args.json_path):
+        raw_vid_path = os.path.join(args.raw_video_root, vid_id + ".mp4")
+        # Store the video's arguments into a list
+        process_video_args.append((raw_vid_path, args.processed_video_root, save_vid_name, bbox, time))
+    print(f"Number of videos: {len(process_video_args)}")
+    
+    # Download the videos
+    if args.running_mode == 'download':
+        for vid_id, save_vid_name, time, bbox in load_data(args.json_path):
+            raw_vid_path = os.path.join(args.raw_video_root, vid_id + ".mp4")
+            # Downloading is io bounded and processing is cpu bounded.
+            # It is better to download all videos firstly and then process them via mutiple cpus.
+            download(raw_vid_path, vid_id, args.proxy)
+    
+    else:   # Run the Processing videos args.running_mode == 'process'
+        ## Process the videos using multiprocessing
+        # set the number of processes to use
+        num_processes = mp.cpu_count() # 8 cpus
+        
+        # create a multiprocessing pool
+        pool = mp.Pool(processes=num_processes)
+        
+        # apply the process_video function to each video with its corresponding arguments
+        results = pool.starmap(process_ffmpeg, process_video_args)
+        
+        # Close the pool
+        pool.close()
+        
+        # Wait for the processes to finish
+        pool.join()
+    
+        #process_ffmpeg(raw_vid_path, processed_vid_root, save_vid_name, bbox, time)
+    
