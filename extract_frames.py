@@ -2,6 +2,7 @@ import cv2
 import os
 import glob
 import argparse
+import multiprocessing
 from tqdm import tqdm
 
 def extract_frame(video_path: str, output_dir: str, n_frames_extract:int=3, temporal_stride: float=1.0, target_resolution: tuple=(512,512)):
@@ -23,7 +24,7 @@ def extract_frame(video_path: str, output_dir: str, n_frames_extract:int=3, temp
         return 
     
     # Create the output directory 
-    output_dir = os.path.join(output_dir, "celebvhq_{}_frames_{:.1f}_seconds_interval".format(n_frames_extract, temporal_stride))
+    output_dir = os.path.join(output_dir, "celebvhq_{}_frames_{:.1f}_seconds_interval_{}".format(n_frames_extract, temporal_stride, target_resolution[0]))
     os.makedirs(output_dir, exist_ok=True)
     video_name = os.path.splitext(os.path.basename(video_path))[0]
     output_path = os.path.join(output_dir, f"{video_name}_frames")
@@ -41,7 +42,7 @@ def extract_frame(video_path: str, output_dir: str, n_frames_extract:int=3, temp
         # Resize
         resized_frame = cv2.resize(frame, target_resolution, interpolation=cv2.INTER_AREA)
         
-        frame_path = os.path.join(output_path, f"frames_{i}.jpg")
+        frame_path = os.path.join(output_path, f"frames_{i}.png")
         cv2.imwrite(frame_path, resized_frame)
 
 if __name__ == '__main__':
@@ -50,7 +51,8 @@ if __name__ == '__main__':
     parser.add_argument('--output_dir','-o', type=str, default="celebvhq_frames", help="The output directory where the frames are saved")
     parser.add_argument('--n_frames', '-n', type=int, default=3, help="Number of frames to be extracted from each video")
     parser.add_argument('--interval', type=float, default=1.0, help="The temporal stride, or temporal distance between extracted frames")
-    parser.add_argument('--size', '-s', type=tuple, default=(512, 512), help="The target resolution for resized frames")
+    parser.add_argument('--size', '-s', type=int, default=512, help="The target resolution for resized frames")
+    # parser.add_argument('--n_workers', type=int, default=4, help="Number of workers")
     args = parser.parse_args()    
         
 
@@ -58,7 +60,10 @@ if __name__ == '__main__':
         os.makedirs(args.output_dir, exist_ok=True)
 
     for video in tqdm(glob.glob(args.input_dir + '/*.mp4')):
-        extract_frame(video, args.output_dir, args.n_frames, args.interval, args.size)
+        extract_frame(video, args.output_dir, args.n_frames, args.interval, (args.size, args.size))
+     
+    
+    
         
 
         
