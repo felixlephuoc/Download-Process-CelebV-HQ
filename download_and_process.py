@@ -48,7 +48,7 @@ def process_ffmpeg(raw_vid_path, save_folder, save_vid_name,
 
     def secs_to_timestr(secs):
         hrs = secs // (60 * 60)
-        min = (secs - hrs * 3600) // 60 # thanks @LeeDongYeun for finding & fixing this bug
+        min = (secs - hrs * 3600) // 60 
         sec = secs % 60
         end = (secs - int(secs)) * 100
         return "{:02d}:{:02d}:{:02d}.{:02d}".format(int(hrs), int(min),
@@ -81,10 +81,9 @@ def process_ffmpeg(raw_vid_path, save_folder, save_vid_name,
 
         return top, bottom, left, right
 
-    if not os.path.exists(raw_vid_path): # the raw video not exist
-        return 
-    
-    else: # the raw video exist => process it     
+    if not os.path.exists(raw_vid_path):
+        return     
+    else:   
         out_path = os.path.join(save_folder, save_vid_name)
         
         cap = cv2.VideoCapture(raw_vid_path)
@@ -93,10 +92,6 @@ def process_ffmpeg(raw_vid_path, save_folder, save_vid_name,
         top, bottom, left, right = to_square(
             denorm(expand(bbox, 0.02), height, width))
         start_sec, end_sec = time
-
-        # Check the FPS
-        #fps = cap.get(cv2.CAP_PROP_FPS)
-        #print("FPS of the video: ", fps)
 
         cmd = f"ffmpeg -i {raw_vid_path} -vf crop=w={right-left}:h={bottom-top}:x={left}:y={top} \
             -ss {secs_to_timestr(start_sec)} -to {secs_to_timestr(end_sec)} -loglevel error {out_path}"
@@ -129,16 +124,14 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
     
-    # Create the output directory
+    # output directory
     os.makedirs(args.raw_video_root, exist_ok=True)
     os.makedirs(args.processed_video_root, exist_ok=True)
     
-    # Create a list to store arguments for each video
     process_video_args = []
     
     for vid_id, save_vid_name, time, bbox in load_data(args.json_path):
         raw_vid_path = os.path.join(args.raw_video_root, vid_id + ".mp4")
-        # Store the video's arguments into a list
         process_video_args.append((raw_vid_path, args.processed_video_root, save_vid_name, bbox, time))
     print(f"Number of videos: {len(process_video_args)}")
     
@@ -150,22 +143,12 @@ if __name__ == '__main__':
             # It is better to download all videos firstly and then process them via mutiple cpus.
             download(raw_vid_path, vid_id, args.proxy)
     
-    else:   # Run the Processing videos args.running_mode == 'process'
-        ## Process the videos using multiprocessing
-        # set the number of processes to use
-        num_processes = mp.cpu_count() # 8 cpus
-        
-        # create a multiprocessing pool
+    else:
+        # Process the videos using multiprocessing
+        num_processes = mp.cpu_count()
         pool = mp.Pool(processes=num_processes)
-        
-        # apply the process_video function to each video with its corresponding arguments
         results = pool.starmap(process_ffmpeg, process_video_args)
-        
-        # Close the pool
         pool.close()
-        
-        # Wait for the processes to finish
         pool.join()
-    
         #process_ffmpeg(raw_vid_path, processed_vid_root, save_vid_name, bbox, time)
     
